@@ -3,9 +3,14 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Feierabend Rechner</title>
+
+<title>Feierabend‑ & Pausenrechner</title>
+
+<meta name="theme-color" content="#667eea">
 
 <style>
+* { box-sizing:border-box; margin:0; padding:0; }
+
 body {
   font-family: Arial, sans-serif;
   background: linear-gradient(135deg,#667eea,#764ba2);
@@ -14,122 +19,180 @@ body {
   align-items:center;
   min-height:100vh;
 }
+
 .card {
-  background:#fff;
-  padding:28px;
-  border-radius:16px;
+  background:white;
+  padding:32px;
+  border-radius:20px;
   width:420px;
-  box-shadow:0 10px 30px rgba(0,0,0,.2);
+  box-shadow:0 10px 30px rgba(0,0,0,.25);
 }
-h2 { text-align:center; margin-bottom:16px; }
-.input-group { margin-bottom:12px; }
+
+h2 {
+  text-align:center;
+  margin-bottom:20px;
+}
+
+.mode {
+  margin-bottom:15px;
+  font-size:14px;
+}
+
+.mode label {
+  display:block;
+  margin-bottom:5px;
+}
+
+.input-group {
+  margin-bottom:14px;
+}
+
 input[type=time] {
   width:100%;
   padding:12px;
-  border-radius:8px;
+  font-size:16px;
+  border-radius:10px;
   border:1px solid #ccc;
 }
+
+button {
+  width:100%;
+  padding:14px;
+  background:#667eea;
+  border:none;
+  border-radius:12px;
+  color:white;
+  font-size:14px;
+  margin-top:8px;
+  cursor:pointer;
+}
+
 .pause-group {
   border:1px solid #ccc;
-  padding:10px;
   border-radius:10px;
+  padding:10px;
   margin-bottom:10px;
+  position:relative;
 }
+
 .remove-btn {
-  float:right;
+  position:absolute;
+  right:8px;
+  top:8px;
   background:#dc2626;
   color:white;
   border:none;
-  border-radius:50%;
   width:22px;
   height:22px;
+  border-radius:50%;
+  font-weight:bold;
   cursor:pointer;
 }
-button {
-  width:100%;
-  padding:12px;
-  background:#667eea;
-  color:white;
-  border:none;
-  border-radius:10px;
-  margin-top:8px;
+
+#status {
+  margin-top:18px;
+  font-size:14px;
+  line-height:1.5;
 }
-#status { margin-top:14px; font-size:14px; }
-.ok { color:#16a34a; font-weight:bold; }
+
+.ok   { color:#16a34a; font-weight:bold; }
 .warn { color:#dc2626; font-weight:bold; }
 .info { color:#2563eb; font-weight:bold; }
 </style>
 </head>
 
 <body>
+
 <div class="card">
 <h2>⏰ Feierabend‑ & Pausenrechner</h2>
 
-<label>
-  <input type="radio" name="mode" value="short" checked>
-  Feierabend &lt; 6h (keine Pause)
-</label><br>
-<label>
-  <input type="radio" name="mode" value="regular">
-  Regelarbeitszeit 8h12
-</label>
+<div class="mode">
+  <label>
+    <input type="radio" name="mode" value="short" checked>
+    Feierabend &lt; 6 h (keine Pause nötig)
+  </label>
+  <label>
+    <input type="radio" name="mode" value="regular">
+    Regelarbeitszeit 8 h 12 min
+  </label>
+</div>
 
 <div class="input-group">
   <input type="time" id="startzeit">
 </div>
 
-<div id="pausen"></div>
-<button onclick="addPause()">Pause hinzufügen</button>
+<div id="pausenContainer"></div>
+<button id="addPause">Pause hinzufügen</button>
 
 <div id="status"></div>
 </div>
 
 <script>
-const WORK_6H = 360;
-const WORK_9H = 540;
+// ==========================
+// KONSTANTEN (Arbeitsrecht)
+// ==========================
+const WORK_6H  = 360; // min
+const WORK_9H  = 540; // min
+const TARGET_8H12 = 492;
+const TARGET_5H59 = 359;
 
-function addPause() {
+// ==========================
+// HILFSFUNKTIONEN
+// ==========================
+function toMin(t){
+  const [h,m] = t.split(":").map(Number);
+  return h*60+m;
+}
+function fmt(m){
+  return String(Math.floor(m/60)).padStart(2,"0") + ":" +
+         String(m%60).padStart(2,"0");
+}
+
+// ==========================
+// PAUSEN HANDLING
+// ==========================
+const pausenContainer = document.getElementById("pausenContainer");
+
+document.getElementById("addPause").addEventListener("click", () => {
   const d = document.createElement("div");
-  d.className = "pause-group";
+  d.className="pause-group";
   d.innerHTML = `
     <input type="time" class="ps"> –
     <input type="time" class="pe">
     <button class="remove-btn">−</button>
   `;
-  d.querySelector(".remove-btn").onclick = () => { d.remove(); update(); };
+  d.querySelector(".remove-btn").onclick = () => {
+    d.remove();
+    update();
+  };
   d.querySelectorAll("input").forEach(i => i.onchange = update);
-  document.getElementById("pausen").appendChild(d);
-}
+  pausenContainer.appendChild(d);
+});
 
+// Inputs überwachen
 document.querySelectorAll("input").forEach(i => i.onchange = update);
 
-function minutes(t) {
-  const [h,m] = t.split(":").map(Number);
-  return h * 60 + m;
-}
-function fmt(m) {
-  return String(Math.floor(m / 60)).padStart(2,"0") + ":" +
-         String(m % 60).padStart(2,"0");
-}
-
-function update() {
-  const start = document.getElementById("startzeit").value;
-  if (!start) return;
+// ==========================
+// BERECHNUNG
+// ==========================
+function update(){
+  const startVal = document.getElementById("startzeit").value;
+  if(!startVal) return;
 
   const mode = document.querySelector("input[name=mode]:checked").value;
-  const startMin = minutes(start);
+  const start = toMin(startVal);
 
   let work = 0;
   let pause = 0;
-  let last = startMin;
+  let last = start;
 
   document.querySelectorAll(".pause-group").forEach(p => {
     const ps = p.querySelector(".ps").value;
     const pe = p.querySelector(".pe").value;
-    if (ps && pe) {
-      const a = minutes(ps);
-      const b = minutes(pe);
-      work += a - last;
+    if(ps && pe){
+      const a = toMin(ps);
+      const b = toMin(pe);
+      work  += a - last;
       pause += b - a;
       last = b;
     }
@@ -137,44 +200,57 @@ function update() {
 
   let out = [];
 
-  /* -------- MODE < 6h -------- */
-  if (mode === "short") {
-    const feierabend = startMin + 359 + pause;
+  // ======================
+  // MODUS < 6h
+  // ======================
+  if(mode === "short"){
+    const feierabend = start + TARGET_5H59 + pause;
     out.push(`<span class="ok">✅ Feierabend ab ${fmt(feierabend)} (keine Pause nötig)</span>`);
   }
 
-  /* -------- MODE 8h12 -------- */
-  if (mode === "regular") {
-    const arbeitsEnde = startMin + 492;
-    out.push(`<span class="info">🕒 8h12 Arbeitszeit erreicht um ${fmt(arbeitsEnde)}</span>`);
+  // ======================
+  // MODUS 8h12
+  // ======================
+  if(mode === "regular"){
 
-    /* erforderliche Mindestpause */
+    // --- Arbeitszeit erreicht
+    const workReached = start + TARGET_8H12;
+    out.push(`<span class="info">🕒 8h12 Arbeitszeit erreicht um ${fmt(workReached)}</span>`);
+
+    // --- erforderliche Mindestpause
     let requiredPause = 0;
-    if (492 > WORK_6H) requiredPause = 30;
-    if (492 > WORK_9H) requiredPause = 60;
+    if(TARGET_8H12 > WORK_6H) requiredPause = 30;
+    if(TARGET_8H12 > WORK_9H) requiredPause = 60;
 
-    const effektivePause = Math.max(pause, requiredPause);
-    const legalFeierabend = startMin + 492 + effektivePause;
+    const effectivePause = Math.max(pause, requiredPause);
+    const legalFeierabend = start + TARGET_8H12 + effectivePause;
 
-    if (pause < requiredPause) {
+    if(pause < requiredPause){
       out.push(
-        `<span class="warn">⚠️ Pflichtpause ${requiredPause} min →
-        frühester legaler Feierabend ${fmt(legalFeierabend)}</span>`
+        `<span class="warn">
+        ⚠️ Pflichtpause ${requiredPause} min noch nicht erfüllt<br>
+        ✅ Frühester LEGALER Feierabend: ${fmt(legalFeierabend)}
+        </span>`
       );
     } else {
       out.push(`<span class="ok">✅ Pflichtpause erfüllt</span>`);
       out.push(`<span class="ok">✅ Feierabend ab ${fmt(legalFeierabend)}</span>`);
     }
 
-    const nineHWorkTime = startMin + WORK_9H + pause;
+    // --- KRITISCHE GRENZE: 9h ARBEITSZEIT (nicht Anwesenheit!)
+    const nineHlimit = start + WORK_9H + pause;
+
     out.push(
-      `<span class="warn">⏰ Bis ${fmt(nineHWorkTime)} reicht 30 min Pause.
-      Ab danach wären 60 min Pause nötig, falls weiter gearbeitet wird.</span>`
+      `<span class="warn">
+      ⏰ Bis ${fmt(nineHlimit)} reicht eine 30‑min‑Pause.<br>
+      Ab danach wären 60 min Pause nötig, FALLS weiter gearbeitet wird.
+      </span>`
     );
   }
 
   document.getElementById("status").innerHTML = out.join("<br>");
 }
 </script>
+
 </body>
 </html>
