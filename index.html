@@ -99,13 +99,16 @@ button {
 
 <script>
 // ================= KONSTANTEN =================
-const TARGET_5H58 = 358;   // Empfehlung <6h
-const TARGET_8H12 = 492;
-const TARGET_8H58 = 538;
-const REQUIRED_PAUSE_6H = 30;
+const TARGET_5H58 = 358;   // Stempel nach <6h
+const TARGET_8H12 = 492;   // Regelarbeitszeit
+const TARGET_8H58 = 538;   // Rundungsschutz
+const REQUIRED_PAUSE = 30;
 
-// ================= HELFER =================
-function toMin(t){ const[h,m]=t.split(":").map(Number); return h*60+m; }
+// ================= HILFSFUNKTIONEN =================
+function toMin(t){
+  const [h,m] = t.split(":").map(Number);
+  return h*60+m;
+}
 function fmt(m){
   return String(Math.floor(m/60)).padStart(2,"0") + ":" +
          String(m%60).padStart(2,"0");
@@ -121,7 +124,7 @@ document.getElementById("addPause").onclick = () => {
     <input type="time" class="pe">
     <button class="remove-btn">−</button>
   `;
-  d.querySelector(".remove-btn").onclick=()=>{d.remove();update();}
+  d.querySelector(".remove-btn").onclick=()=>{d.remove();update()};
   d.querySelectorAll("input").forEach(i=>i.onchange=update);
   pc.appendChild(d);
 };
@@ -139,7 +142,7 @@ function update(){
   document.querySelectorAll(".pause-group").forEach(p=>{
     const ps=p.querySelector(".ps").value;
     const pe=p.querySelector(".pe").value;
-    if(ps&&pe){
+    if(ps && pe){
       const a=toMin(ps), b=toMin(pe);
       work+=a-last;
       pause+=b-a;
@@ -149,48 +152,35 @@ function update(){
 
   let out=[];
 
-  // ===== 5h58 EMPFEHLUNG =====
-  const stamp5h58 = start + TARGET_5H58 + pause;
+  // === AKTUELLE PAUSENZEIT ===
+  out.push(`<span class="info">ℹ️ Aktuelle Gesamt‑Pause: ${pause} min</span>`);
+
+  // === STEMPELN NACH 5H58 ===
   out.push(
     `<span class="ok">
-     ✅ Stempel‑Empfehlung &lt; 6h: ${fmt(stamp5h58)}
-     (keine Pause nötig)
+     ✅ Stempeln nach 5h58 (ohne Pause): ${fmt(start + TARGET_5H58 + pause)}
      </span>`
   );
 
-  // ===== 8h12 REGELARBEITSZEIT =====
-  const requiredPause = 30;
-  const effectivePause = Math.max(pause, requiredPause);
-  const legal8h12 = start + TARGET_8H12 + effectivePause;
-
-  out.push(
-    pause >= requiredPause
-    ? `<span class="ok">
-       ✅ Pflichtpause erfüllt (${pause} min)
-       </span>`
-    : `<span class="warn">
-       ⚠️ Pflichtpause ${requiredPause} min erforderlich
-       (aktuell: ${pause} min)
-       </span>`
-  );
-
+  // === STEMPELN NACH 8H12 (MIT PAUSE) ===
+  const effectivePause = Math.max(pause, REQUIRED_PAUSE);
   out.push(
     `<span class="ok">
-     ✅ Regelarbeitszeit (8h12): Feierabend ab ${fmt(legal8h12)}
+     ✅ Stempeln nach 8h12 (inkl. Pause): ${fmt(start + TARGET_8H12 + effectivePause)}
      </span>`
   );
 
-  // ===== 8h58 RUNDUNGSSCHUTZ =====
-  const stamp8h58 = start + TARGET_8H58 + pause;
+  // === STEMPEL‑EMPFEHLUNG 8H58 ===
   out.push(
     `<span class="warn">
-     ✅ Stempel‑Empfehlung bei 8h58: ${fmt(stamp8h58)}<br>
-     (Rundungsschutz – vermeidet automatische Zusatzpause)
+     ✅ Stempel‑Empfehlung 8h58: ${fmt(start + TARGET_8H58 + pause)}<br>
+     (Rundungsschutz – verhindert Zusatzpause)
      </span>`
   );
 
   document.getElementById("status").innerHTML=out.join("<br>");
 }
 </script>
+
 </body>
 </html>
