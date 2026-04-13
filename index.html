@@ -10,8 +10,8 @@ body {
   font-family: Arial, sans-serif;
   background: linear-gradient(135deg,#667eea,#764ba2);
   display:flex;
-  align-items:center;
   justify-content:center;
+  align-items:center;
   min-height:100vh;
 }
 .card {
@@ -19,27 +19,40 @@ body {
   padding:28px;
   border-radius:16px;
   width:420px;
-  box-shadow:0 10px 30px rgba(0,0,0,0.2);
+  box-shadow:0 10px 30px rgba(0,0,0,.2);
 }
 h2 { text-align:center; margin-bottom:16px; }
 .input-group { margin-bottom:12px; }
 input[type=time] {
-  width:100%; padding:12px; border-radius:8px; border:1px solid #ccc;
+  width:100%;
+  padding:12px;
+  border-radius:8px;
+  border:1px solid #ccc;
 }
 .pause-group {
-  border:1px solid #ccc; padding:10px;
-  border-radius:10px; margin-bottom:10px;
+  border:1px solid #ccc;
+  padding:10px;
+  border-radius:10px;
+  margin-bottom:10px;
 }
 .remove-btn {
   float:right;
-  background:#dc2626; color:white; border:none;
-  border-radius:50%; width:22px; height:22px;
+  background:#dc2626;
+  color:white;
+  border:none;
+  border-radius:50%;
+  width:22px;
+  height:22px;
   cursor:pointer;
 }
 button {
-  width:100%; padding:12px; border:none;
-  border-radius:10px; background:#667eea;
-  color:white; margin-top:8px;
+  width:100%;
+  padding:12px;
+  background:#667eea;
+  color:white;
+  border:none;
+  border-radius:10px;
+  margin-top:8px;
 }
 #status { margin-top:14px; font-size:14px; }
 .ok { color:#16a34a; font-weight:bold; }
@@ -49,13 +62,12 @@ button {
 </head>
 
 <body>
-
 <div class="card">
 <h2>⏰ Feierabend‑ & Pausenrechner</h2>
 
 <label>
   <input type="radio" name="mode" value="short" checked>
-  Feierabend &lt; 6h (keine Pause)
+  Feierabend &lt; 6h (keine Pause)
 </label><br>
 <label>
   <input type="radio" name="mode" value="regular">
@@ -77,89 +89,92 @@ const WORK_6H = 360;
 const WORK_9H = 540;
 
 function addPause() {
-  const d=document.createElement("div");
-  d.className="pause-group";
-  d.innerHTML=`
+  const d = document.createElement("div");
+  d.className = "pause-group";
+  d.innerHTML = `
     <input type="time" class="ps"> –
     <input type="time" class="pe">
     <button class="remove-btn">−</button>
   `;
-  d.querySelector(".remove-btn").onclick=()=>{d.remove();update();}
-  d.querySelectorAll("input").forEach(i=>i.onchange=update);
+  d.querySelector(".remove-btn").onclick = () => { d.remove(); update(); };
+  d.querySelectorAll("input").forEach(i => i.onchange = update);
   document.getElementById("pausen").appendChild(d);
 }
 
-document.querySelectorAll("input").forEach(i=>i.onchange=update);
+document.querySelectorAll("input").forEach(i => i.onchange = update);
 
-function minutes(t){
-  const [h,m]=t.split(":").map(Number);
-  return h*60+m;
+function minutes(t) {
+  const [h,m] = t.split(":").map(Number);
+  return h * 60 + m;
 }
-function fmt(m){
-  return String(Math.floor(m/60)).padStart(2,"0")+":"+
-         String(m%60).padStart(2,"0");
+function fmt(m) {
+  return String(Math.floor(m / 60)).padStart(2,"0") + ":" +
+         String(m % 60).padStart(2,"0");
 }
 
-function update(){
-  const start=document.getElementById("startzeit").value;
-  if(!start) return;
+function update() {
+  const start = document.getElementById("startzeit").value;
+  if (!start) return;
 
-  const mode=document.querySelector("input[name=mode]:checked").value;
-  const startMin=minutes(start);
+  const mode = document.querySelector("input[name=mode]:checked").value;
+  const startMin = minutes(start);
 
-  let work=0, pause=0;
-  let last=startMin;
+  let work = 0;
+  let pause = 0;
+  let last = startMin;
 
-  document.querySelectorAll(".pause-group").forEach(p=>{
-    const ps=p.querySelector(".ps").value;
-    const pe=p.querySelector(".pe").value;
-    if(ps && pe){
-      const a=minutes(ps), b=minutes(pe);
-      work += a-last;
-      pause += b-a;
+  document.querySelectorAll(".pause-group").forEach(p => {
+    const ps = p.querySelector(".ps").value;
+    const pe = p.querySelector(".pe").value;
+    if (ps && pe) {
+      const a = minutes(ps);
+      const b = minutes(pe);
+      work += a - last;
+      pause += b - a;
       last = b;
     }
   });
 
-  let out=[];
+  let out = [];
 
-  // ---------- MODUS < 6h ----------
-  if(mode==="short"){
-    const feierabend=startMin + 359 + pause;
+  /* -------- MODE < 6h -------- */
+  if (mode === "short") {
+    const feierabend = startMin + 359 + pause;
     out.push(`<span class="ok">✅ Feierabend ab ${fmt(feierabend)} (keine Pause nötig)</span>`);
   }
 
-  // ---------- MODUS 8h12 ----------
-  if(mode==="regular"){
-    const feierabend=startMin + 492 + pause;
-    out.push(`<span class="info">🕒 Feierabend (8h12) ab ${fmt(feierabend)}</span>`);
+  /* -------- MODE 8h12 -------- */
+  if (mode === "regular") {
+    const arbeitsEnde = startMin + 492;
+    out.push(`<span class="info">🕒 8h12 Arbeitszeit erreicht um ${fmt(arbeitsEnde)}</span>`);
 
-    if(work > WORK_6H && pause < 30){
-      out.push(`<span class="warn">⚠️ Mindestens 30 min Pause erforderlich</span>`);
-    } else {
-      out.push(`<span class="ok">✅ 30 min‑Pausenregel erfüllt</span>`);
-    }
+    /* erforderliche Mindestpause */
+    let requiredPause = 0;
+    if (492 > WORK_6H) requiredPause = 30;
+    if (492 > WORK_9H) requiredPause = 60;
 
-    // KRITISCHER ZEITPUNKT: 9h ARBEITSZEIT, NICHT ANWESENHEIT
-    const zeitpunkt9h = startMin + WORK_9H + pause;
+    const effektivePause = Math.max(pause, requiredPause);
+    const legalFeierabend = startMin + 492 + effektivePause;
 
-    if(work < WORK_9H){
+    if (pause < requiredPause) {
       out.push(
-        `<span class="warn">⏰ Bis ${fmt(zeitpunkt9h)} reicht eine 30‑min‑Pause.<br>
-        Ab danach wären 60 min Pause nötig, FALLS weiter gearbeitet wird.</span>`
-      );
-    } else if(pause < 60){
-      out.push(
-        `<span class="warn">🔴 Mehr als 9h gearbeitet → insgesamt 60 min Pause erforderlich</span>`
+        `<span class="warn">⚠️ Pflichtpause ${requiredPause} min →
+        frühester legaler Feierabend ${fmt(legalFeierabend)}</span>`
       );
     } else {
-      out.push(`<span class="ok">✅ 60 min‑Pausenregel erfüllt</span>`);
+      out.push(`<span class="ok">✅ Pflichtpause erfüllt</span>`);
+      out.push(`<span class="ok">✅ Feierabend ab ${fmt(legalFeierabend)}</span>`);
     }
+
+    const nineHWorkTime = startMin + WORK_9H + pause;
+    out.push(
+      `<span class="warn">⏰ Bis ${fmt(nineHWorkTime)} reicht 30 min Pause.
+      Ab danach wären 60 min Pause nötig, falls weiter gearbeitet wird.</span>`
+    );
   }
 
   document.getElementById("status").innerHTML = out.join("<br>");
 }
 </script>
-
 </body>
 </html>
