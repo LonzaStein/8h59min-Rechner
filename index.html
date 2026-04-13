@@ -21,7 +21,7 @@ body {
   background:white;
   padding:32px;
   border-radius:20px;
-  width:450px;
+  width:480px;
   box-shadow:0 10px 30px rgba(0,0,0,.25);
 }
 
@@ -30,16 +30,10 @@ h2 {
   margin-bottom:18px;
 }
 
-.mode label {
-  display:block;
-  margin-bottom:6px;
-  font-size:14px;
-}
-
 input[type=time] {
   width:100%;
   padding:12px;
-  margin-top:8px;
+  margin-top:10px;
   border-radius:10px;
   border:1px solid #ccc;
   font-size:15px;
@@ -82,7 +76,7 @@ button {
 #status {
   margin-top:18px;
   font-size:14px;
-  line-height:1.55;
+  line-height:1.6;
 }
 
 .ok   { color:#16a34a; font-weight:bold; }
@@ -95,13 +89,6 @@ button {
 <div class="card">
 <h2>⏰ Feierabend‑ & Pausenrechner</h2>
 
-<div class="mode">
-  <label><input type="radio" name="mode" value="short" checked>
-    Feierabend &lt; 6 h (keine Pause nötig)</label>
-  <label><input type="radio" name="mode" value="regular">
-    Regelarbeitszeit 8 h 12 min</label>
-</div>
-
 <input type="time" id="startzeit">
 
 <div id="pausenContainer"></div>
@@ -111,135 +98,99 @@ button {
 </div>
 
 <script>
-// =======================
-// ARBEITSRECHT‑KONSTANTEN
-// =======================
-const WORK_6H  = 360;   // Minuten
-const WORK_9H  = 540;   // Minuten
-const TARGET_5H59 = 359;
+// ================= KONSTANTEN =================
+const TARGET_5H58 = 358;   // Empfehlung <6h
 const TARGET_8H12 = 492;
-const TARGET_8H59 = 539;
+const TARGET_8H58 = 538;
+const REQUIRED_PAUSE_6H = 30;
 
-// =======================
-// HILFSFUNKTIONEN
-// =======================
-function toMin(t){
-  const [h,m] = t.split(":").map(Number);
-  return h*60+m;
-}
+// ================= HELFER =================
+function toMin(t){ const[h,m]=t.split(":").map(Number); return h*60+m; }
 function fmt(m){
   return String(Math.floor(m/60)).padStart(2,"0") + ":" +
          String(m%60).padStart(2,"0");
 }
 
-// =======================
-// PAUSEN‑HANDLING
-// =======================
+// ================= PAUSEN =================
 const pc = document.getElementById("pausenContainer");
 document.getElementById("addPause").onclick = () => {
-  const d = document.createElement("div");
-  d.className = "pause-group";
-  d.innerHTML = `
+  const d=document.createElement("div");
+  d.className="pause-group";
+  d.innerHTML=`
     <input type="time" class="ps"> –
     <input type="time" class="pe">
     <button class="remove-btn">−</button>
   `;
-  d.querySelector(".remove-btn").onclick = () => { d.remove(); update(); };
-  d.querySelectorAll("input").forEach(i => i.onchange = update);
+  d.querySelector(".remove-btn").onclick=()=>{d.remove();update();}
+  d.querySelectorAll("input").forEach(i=>i.onchange=update);
   pc.appendChild(d);
 };
 
-document.querySelectorAll("input").forEach(i => i.onchange = update);
+document.querySelectorAll("input").forEach(i=>i.onchange=update);
 
-// =======================
-// HAUPTLOGIK
-// =======================
+// ================= HAUPTLOGIK =================
 function update(){
-  const s = document.getElementById("startzeit").value;
+  const s=document.getElementById("startzeit").value;
   if(!s) return;
 
-  const mode = document.querySelector("input[name=mode]:checked").value;
-  const start = toMin(s);
+  const start=toMin(s);
+  let work=0, pause=0, last=start;
 
-  let work = 0;
-  let pause = 0;
-  let last = start;
-
-  document.querySelectorAll(".pause-group").forEach(p => {
-    const ps = p.querySelector(".ps").value;
-    const pe = p.querySelector(".pe").value;
-    if(ps && pe){
-      const a = toMin(ps);
-      const b = toMin(pe);
-      work  += a - last;
-      pause += b - a;
-      last = b;
+  document.querySelectorAll(".pause-group").forEach(p=>{
+    const ps=p.querySelector(".ps").value;
+    const pe=p.querySelector(".pe").value;
+    if(ps&&pe){
+      const a=toMin(ps), b=toMin(pe);
+      work+=a-last;
+      pause+=b-a;
+      last=b;
     }
   });
 
-  let out = [];
+  let out=[];
 
-  // ===================
-  // MODUS < 6h
-  // ===================
-  if(mode === "short"){
-    out.push(
-      `<span class="ok">
-      ✅ Feierabend ab ${fmt(start + TARGET_5H59 + pause)}
-      (keine Pause nötig)
-      </span>`
-    );
-  }
+  // ===== 5h58 EMPFEHLUNG =====
+  const stamp5h58 = start + TARGET_5H58 + pause;
+  out.push(
+    `<span class="ok">
+     ✅ Stempel‑Empfehlung &lt; 6h: ${fmt(stamp5h58)}
+     (keine Pause nötig)
+     </span>`
+  );
 
-  // ===================
-  // MODUS 8h12
-  // ===================
-  if(mode === "regular"){
+  // ===== 8h12 REGELARBEITSZEIT =====
+  const requiredPause = 30;
+  const effectivePause = Math.max(pause, requiredPause);
+  const legal8h12 = start + TARGET_8H12 + effectivePause;
 
-    // Pflichtpause (>6h → 30min)
-    const requiredPause = 30;
-    const effectivePause = Math.max(pause, requiredPause);
+  out.push(
+    pause >= requiredPause
+    ? `<span class="ok">
+       ✅ Pflichtpause erfüllt (${pause} min)
+       </span>`
+    : `<span class="warn">
+       ⚠️ Pflichtpause ${requiredPause} min erforderlich
+       (aktuell: ${pause} min)
+       </span>`
+  );
 
-    const legalFeierabend = start + TARGET_8H12 + effectivePause;
+  out.push(
+    `<span class="ok">
+     ✅ Regelarbeitszeit (8h12): Feierabend ab ${fmt(legal8h12)}
+     </span>`
+  );
 
-    out.push(
-      `<span class="ok">
-      ✅ Frühester LEGALER Feierabend: ${fmt(legalFeierabend)}
-      </span>`
-    );
+  // ===== 8h58 RUNDUNGSSCHUTZ =====
+  const stamp8h58 = start + TARGET_8H58 + pause;
+  out.push(
+    `<span class="warn">
+     ✅ Stempel‑Empfehlung bei 8h58: ${fmt(stamp8h58)}<br>
+     (Rundungsschutz – vermeidet automatische Zusatzpause)
+     </span>`
+  );
 
-    out.push(
-      pause >= requiredPause
-      ? `<span class="ok">
-         ✅ Pflichtpause erfüllt (aktuell: ${pause} min)
-         </span>`
-      : `<span class="warn">
-         ⚠️ Pflichtpause ${requiredPause} min erforderlich
-         (aktuell: ${pause} min)
-         </span>`
-    );
-
-    // 8h59 / 9h‑Grenze rein nach ARBEITSZEIT
-    const reach9h = start + WORK_9H + pause;
-    const recommendedStamp = reach9h - 2; // 8h58 Empfehlung
-
-    out.push(
-      `<span class="info">
-      ⏰ 9h reine Arbeitszeit wären theoretisch um ${fmt(reach9h)} erreicht
-      </span>`
-    );
-
-    out.push(
-      `<span class="warn">
-      ✅ Stempel‑Empfehlung: spätestens um ${fmt(recommendedStamp)}<br>
-      (Rundungsschutz – vermeidet automatische Zusatzpause)
-      </span>`
-    );
-  }
-
-  document.getElementById("status").innerHTML = out.join("<br>");
+  document.getElementById("status").innerHTML=out.join("<br>");
 }
 </script>
-
 </body>
 </html>
