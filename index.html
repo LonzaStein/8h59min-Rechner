@@ -3,7 +3,6 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-
 <title>Feierabend‑ & Pausenrechner</title>
 
 <style>
@@ -22,13 +21,20 @@ body {
   background:white;
   padding:32px;
   border-radius:20px;
-  width:430px;
+  width:450px;
   box-shadow:0 10px 30px rgba(0,0,0,.25);
 }
 
-h2 { text-align:center; margin-bottom:18px; }
+h2 {
+  text-align:center;
+  margin-bottom:18px;
+}
 
-.mode label { display:block; margin-bottom:6px; }
+.mode label {
+  display:block;
+  margin-bottom:6px;
+  font-size:14px;
+}
 
 input[type=time] {
   width:100%;
@@ -36,6 +42,7 @@ input[type=time] {
   margin-top:8px;
   border-radius:10px;
   border:1px solid #ccc;
+  font-size:15px;
 }
 
 button {
@@ -46,6 +53,8 @@ button {
   border-radius:12px;
   color:white;
   margin-top:10px;
+  font-size:14px;
+  cursor:pointer;
 }
 
 .pause-group {
@@ -66,13 +75,14 @@ button {
   width:22px;
   height:22px;
   border-radius:50%;
+  font-weight:bold;
   cursor:pointer;
 }
 
 #status {
   margin-top:18px;
   font-size:14px;
-  line-height:1.5;
+  line-height:1.55;
 }
 
 .ok   { color:#16a34a; font-weight:bold; }
@@ -86,8 +96,10 @@ button {
 <h2>⏰ Feierabend‑ & Pausenrechner</h2>
 
 <div class="mode">
-  <label><input type="radio" name="mode" value="short" checked> Feierabend &lt; 6h (keine Pause)</label>
-  <label><input type="radio" name="mode" value="regular"> Regelarbeitszeit 8h12</label>
+  <label><input type="radio" name="mode" value="short" checked>
+    Feierabend &lt; 6 h (keine Pause nötig)</label>
+  <label><input type="radio" name="mode" value="regular">
+    Regelarbeitszeit 8 h 12 min</label>
 </div>
 
 <input type="time" id="startzeit">
@@ -99,74 +111,135 @@ button {
 </div>
 
 <script>
-const WORK_6H  = 360;
-const WORK_9H  = 540;
+// =======================
+// ARBEITSRECHT‑KONSTANTEN
+// =======================
+const WORK_6H  = 360;   // Minuten
+const WORK_9H  = 540;   // Minuten
+const TARGET_5H59 = 359;
 const TARGET_8H12 = 492;
 const TARGET_8H59 = 539;
-const TARGET_5H59 = 359;
 
-function toMin(t){ const[h,m]=t.split(":").map(Number); return h*60+m; }
-function fmt(m){ return String(Math.floor(m/60)).padStart(2,"0")+":"+String(m%60).padStart(2,"0"); }
+// =======================
+// HILFSFUNKTIONEN
+// =======================
+function toMin(t){
+  const [h,m] = t.split(":").map(Number);
+  return h*60+m;
+}
+function fmt(m){
+  return String(Math.floor(m/60)).padStart(2,"0") + ":" +
+         String(m%60).padStart(2,"0");
+}
 
+// =======================
+// PAUSEN‑HANDLING
+// =======================
 const pc = document.getElementById("pausenContainer");
 document.getElementById("addPause").onclick = () => {
-  const d=document.createElement("div");
-  d.className="pause-group";
-  d.innerHTML=`
+  const d = document.createElement("div");
+  d.className = "pause-group";
+  d.innerHTML = `
     <input type="time" class="ps"> –
     <input type="time" class="pe">
     <button class="remove-btn">−</button>
   `;
-  d.querySelector(".remove-btn").onclick=()=>{d.remove();update();}
-  d.querySelectorAll("input").forEach(i=>i.onchange=update);
+  d.querySelector(".remove-btn").onclick = () => { d.remove(); update(); };
+  d.querySelectorAll("input").forEach(i => i.onchange = update);
   pc.appendChild(d);
 };
 
-document.querySelectorAll("input").forEach(i=>i.onchange=update);
+document.querySelectorAll("input").forEach(i => i.onchange = update);
 
+// =======================
+// HAUPTLOGIK
+// =======================
 function update(){
-  const s=document.getElementById("startzeit").value;
+  const s = document.getElementById("startzeit").value;
   if(!s) return;
 
-  const mode=document.querySelector("input[name=mode]:checked").value;
-  const start=toMin(s);
+  const mode = document.querySelector("input[name=mode]:checked").value;
+  const start = toMin(s);
 
-  let work=0, pause=0, last=start;
-  document.querySelectorAll(".pause-group").forEach(p=>{
-    const ps=p.querySelector(".ps").value;
-    const pe=p.querySelector(".pe").value;
-    if(ps&&pe){
-      const a=toMin(ps), b=toMin(pe);
-      work+=a-last; pause+=b-a; last=b;
+  let work = 0;
+  let pause = 0;
+  let last = start;
+
+  document.querySelectorAll(".pause-group").forEach(p => {
+    const ps = p.querySelector(".ps").value;
+    const pe = p.querySelector(".pe").value;
+    if(ps && pe){
+      const a = toMin(ps);
+      const b = toMin(pe);
+      work  += a - last;
+      pause += b - a;
+      last = b;
     }
   });
 
-  let out=[];
+  let out = [];
 
-  if(mode==="short"){
-    out.push(`<span class="ok">✅ Feierabend ab ${fmt(start+TARGET_5H59+pause)}</span>`);
+  // ===================
+  // MODUS < 6h
+  // ===================
+  if(mode === "short"){
+    out.push(
+      `<span class="ok">
+      ✅ Feierabend ab ${fmt(start + TARGET_5H59 + pause)}
+      (keine Pause nötig)
+      </span>`
+    );
   }
 
-  if(mode==="regular"){
-    let requiredPause = TARGET_8H12 > WORK_6H ? 30 : 0;
-    let effectivePause = Math.max(pause, requiredPause);
+  // ===================
+  // MODUS 8h12
+  // ===================
+  if(mode === "regular"){
+
+    // Pflichtpause (>6h → 30min)
+    const requiredPause = 30;
+    const effectivePause = Math.max(pause, requiredPause);
 
     const legalFeierabend = start + TARGET_8H12 + effectivePause;
-    out.push(`<span class="ok">✅ Frühester LEGALER Feierabend: ${fmt(legalFeierabend)}</span>`);
+
+    out.push(
+      `<span class="ok">
+      ✅ Frühester LEGALER Feierabend: ${fmt(legalFeierabend)}
+      </span>`
+    );
 
     out.push(
       pause >= requiredPause
-      ? `<span class="ok">✅ Pflichtpause erfüllt (aktuell: ${pause} min)</span>`
-      : `<span class="warn">⚠️ Pflichtpause ${requiredPause} min erforderlich (aktuell: ${pause} min)</span>`
+      ? `<span class="ok">
+         ✅ Pflichtpause erfüllt (aktuell: ${pause} min)
+         </span>`
+      : `<span class="warn">
+         ⚠️ Pflichtpause ${requiredPause} min erforderlich
+         (aktuell: ${pause} min)
+         </span>`
     );
 
-    const reach859 = start + TARGET_8H59 + pause;
-    out.push(`<span class="warn">⏰ 8h59 reine Arbeitszeit um ${fmt(reach859)}</span>`);
-    out.push(`<span class="info">👉 Empfehlung: spätestens bei 8h58 stempeln (Rundungsschutz)</span>`);
+    // 8h59 / 9h‑Grenze rein nach ARBEITSZEIT
+    const reach9h = start + WORK_9H + pause;
+    const recommendedStamp = reach9h - 2; // 8h58 Empfehlung
+
+    out.push(
+      `<span class="info">
+      ⏰ 9h reine Arbeitszeit wären theoretisch um ${fmt(reach9h)} erreicht
+      </span>`
+    );
+
+    out.push(
+      `<span class="warn">
+      ✅ Stempel‑Empfehlung: spätestens um ${fmt(recommendedStamp)}<br>
+      (Rundungsschutz – vermeidet automatische Zusatzpause)
+      </span>`
+    );
   }
 
-  document.getElementById("status").innerHTML=out.join("<br>");
+  document.getElementById("status").innerHTML = out.join("<br>");
 }
 </script>
+
 </body>
 </html>
