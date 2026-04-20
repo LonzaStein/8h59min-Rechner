@@ -25,10 +25,7 @@ body {
   box-shadow:0 10px 30px rgba(0,0,0,.25);
 }
 
-h2 {
-  text-align:center;
-  margin-bottom:18px;
-}
+h2 { text-align:center; margin-bottom:18px; }
 
 input[type=time] {
   width:100%;
@@ -36,7 +33,6 @@ input[type=time] {
   margin-top:10px;
   border-radius:10px;
   border:1px solid #ccc;
-  font-size:15px;
 }
 
 button {
@@ -47,7 +43,6 @@ button {
   border-radius:12px;
   color:white;
   margin-top:10px;
-  font-size:14px;
   cursor:pointer;
 }
 
@@ -69,53 +64,59 @@ button {
   width:22px;
   height:22px;
   border-radius:50%;
-  font-weight:bold;
   cursor:pointer;
 }
 
-#status {
-  margin-top:18px;
-  font-size:14px;
-  line-height:1.6;
-}
+#status { margin-top:18px; line-height:1.6; }
 
-.ok   { color:#16a34a; font-weight:bold; }
+.ok { color:#16a34a; font-weight:bold; }
 .warn { color:#dc2626; font-weight:bold; }
 .info { color:#2563eb; font-weight:bold; }
+
+.main-time {
+  font-size:20px;
+  margin-top:10px;
+  text-align:center;
+}
 </style>
 </head>
 
 <body>
 <div class="card">
-<h2>⏰ Feierabend- & Pausenrechner</h2>
+<h2>⏰ Feierabend-Rechner</h2>
 
 <input type="time" id="startzeit">
 
 <div id="pausenContainer"></div>
 <button id="addPause">Pause hinzufügen</button>
 
+<label style="display:block; margin-top:12px;">
+  <input type="checkbox" id="notifToggle"> Erinnerungen aktivieren
+</label>
+<button id="enableNotif">🔔 Aktivieren</button>
+
 <div id="status"></div>
 </div>
 
 <script>
-// ================= KONSTANTEN =================
+// ===== KONSTANTEN =====
 const TARGET_5H58 = 358;
 const TARGET_8H12 = 492;
 const TARGET_8H58 = 538;
 const REQUIRED_PAUSE = 30;
-const MAX_WORK = 600; // 10h reine Arbeitszeit
+const MAX_WORK = 600;
 
-// ================= HILFSFUNKTIONEN =================
+// ===== HILFSFUNKTIONEN =====
 function toMin(t){
   const [h,m] = t.split(":").map(Number);
   return h*60+m;
 }
 function fmt(m){
-  return String(Math.floor(m/60)%24).padStart(2,"0") + ":" +
+  return String(Math.floor(m/60)%24).padStart(2,"0")+":"+
          String(m%60).padStart(2,"0");
 }
 
-// ================= PAUSEN =================
+// ===== PAUSEN =====
 const pc = document.getElementById("pausenContainer");
 
 document.getElementById("addPause").onclick = () => {
@@ -133,7 +134,59 @@ document.getElementById("addPause").onclick = () => {
 
 document.querySelectorAll("input").forEach(i=>i.onchange=update);
 
-// ================= HAUPTLOGIK =================
+// ===== NOTIFICATIONS =====
+let notificationsEnabled = false;
+let timers = [];
+
+function notify(title, body){
+  if (!notificationsEnabled) return;
+  new Notification(title,{body});
+}
+
+function clearTimers(){
+  timers.forEach(t => clearTimeout(t));
+  timers=[];
+}
+
+function scheduleNotifications(start, pause, effectivePause){
+  clearTimers();
+
+  const events = [
+    { name:"5h58", time:start + TARGET_5H58 + pause },
+    { name:"8h12", time:start + TARGET_8H12 + effectivePause },
+    { name:"8h58", time:start + TARGET_8H58 + effectivePause },
+    { name:"10h",  time:start + MAX_WORK + effectivePause }
+  ];
+
+  const now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
+
+  events.forEach(ev=>{
+    const trigger = ev.time - 5;
+    if(trigger > nowMin){
+      const delay = (trigger - nowMin)*60000;
+      const t=setTimeout(()=>{
+        notify("Erinnerung", `${ev.name} in 5 Minuten`);
+      },delay);
+      timers.push(t);
+    }
+  });
+}
+
+document.getElementById("enableNotif").onclick = async () => {
+  if(!document.getElementById("notifToggle").checked){
+    alert("Bitte zuerst Checkbox aktivieren");
+    return;
+  }
+
+  const perm = await Notification.requestPermission();
+  if(perm==="granted"){
+    notificationsEnabled=true;
+    update();
+  }
+};
+
+// ===== HAUPTLOGIK =====
 function update(){
   const s=document.getElementById("startzeit").value;
   if(!s) return;
@@ -152,7 +205,6 @@ function update(){
     }
   });
 
-  // === LIVE-ARBEITSZEIT BIS JETZT ===
   const now = new Date();
   const nowMin = now.getHours()*60 + now.getMinutes();
 
@@ -161,50 +213,41 @@ function update(){
     currentWork += (nowMin - last);
   }
 
-  // === EFFECTIVE PAUSE ===
-  let effectivePause = pause === 0 ? REQUIRED_PAUSE : pause;
+  let effectivePause = pause===0 ? REQUIRED_PAUSE : pause;
+
+  // ===== HAUPTENTSCHEIDUNG =====
+  let primaryEnd = effectivePause>=30
+    ? start + TARGET_8H12 + effectivePause
+    : start + TARGET_8H58 + effectivePause;
 
   let out=[];
 
-  // === PAUSENSTATUS ===
-  if (pause === 0) {
-    out.push(`<span class="info">ℹ️ Keine Pause → automatisch 30 min berücksichtigt</span>`);
+  out.push(`<div class="main-time">🟢 Feierabend: ${fmt(primaryEnd)}</div>`);
+
+  // ===== STATUS =====
+  out.push(`<div class="info">
+    Arbeitszeit: ${Math.floor(currentWork/60)}h ${currentWork%60}min<br>
+    Pause: ${pause || 30} min<br>
+    ${currentWork>MAX_WORK
+      ? "⚠️ Genehmigung nötig (>10h)"
+      : "✅ im Rahmen"}
+  </div>`);
+
+  // ===== DETAILS =====
+  out.push(`<details style="margin-top:10px;">
+    <summary>Details</summary>
+    5h58: ${fmt(start + TARGET_5H58 + pause)}<br>
+    8h12: ${fmt(start + TARGET_8H12 + effectivePause)}<br>
+    8h58: ${fmt(start + TARGET_8H58 + effectivePause)}<br>
+    10h: ${fmt(start + MAX_WORK + effectivePause)}
+  </details>`);
+
+  document.getElementById("status").innerHTML=out.join("");
+
+  // ===== NOTIFICATIONS =====
+  if(notificationsEnabled){
+    scheduleNotifications(start, pause, effectivePause);
   }
-  else if (pause < 30) {
-    out.push(`<span class="warn">⚠️ Pause ${pause} min → unter Mindestpause</span>`);
-  }
-  else if (pause < 60) {
-    out.push(`<span class="ok">✅ Mindestpause erfüllt (${pause} min)</span>`);
-  }
-  else {
-    out.push(`<span class="ok">✅ 60 min Pause erfüllt (${pause} min)</span>`);
-  }
-
-  // === ARBEITSZEIT STATUS ===
-  out.push(`<span class="info">ℹ️ Aktuelle Arbeitszeit: ${Math.floor(currentWork/60)}h ${currentWork%60}min</span>`);
-
-  if(currentWork > MAX_WORK){
-    out.push(`<span class="warn">⚠️ Über 10h Arbeitszeit → Genehmigung erforderlich</span>`);
-  } else {
-    out.push(`<span class="ok">✅ Innerhalb genehmigungsfreier Bereich (&lt;10h)</span>`);
-  }
-
-  // === ZEITEN ===
-  out.push(`<span class="ok">✅ Stempeln nach 5h58: ${fmt(start + TARGET_5H58 + pause)}</span>`);
-
-  out.push(`<span class="ok">✅ Stempeln nach 8h12: ${fmt(start + TARGET_8H12 + effectivePause)}</span>`);
-
-  out.push(`<span class="warn">
-    ✅ Stempel-Empfehlung 8h58: ${fmt(start + TARGET_8H58 + effectivePause)}<br>
-    (Rundungsschutz)
-  </span>`);
-
-  // === HINWEIS 8H58 ===
-  if(pause >= 30){
-    out.push(`<span class="ok">ℹ️ 8h58-Regel für dich nicht zwingend relevant</span>`);
-  }
-
-  document.getElementById("status").innerHTML=out.join("<br>");
 }
 </script>
 
