@@ -2,7 +2,8 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<title>Feierabend Rechner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Feierabend-Rechner</title>
 
 <style>
 body{
@@ -39,7 +40,7 @@ button{
 }
 
 .section{
-  margin-top:16px;
+  margin-top:14px;
   padding:12px;
   border-radius:10px;
   background:#f3f4f6;
@@ -60,7 +61,7 @@ button{
 <body>
 
 <div class="card">
-<h2>⏰ Feierabend Rechner</h2>
+<h2>⏰ Feierabend-Rechner</h2>
 
 <input type="time" id="start">
 
@@ -83,7 +84,8 @@ function min(t){
 }
 
 function fmt(m){
-  return String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
+  return String(Math.floor(m/60)%24).padStart(2,"0")+":"+
+         String(m%60).padStart(2,"0");
 }
 
 function addPause(){
@@ -98,14 +100,16 @@ function addPause(){
 
 function calc(){
 
-let s=document.getElementById("start").value;
+const s=document.getElementById("start").value;
 if(!s) return;
 
-let start=min(s);
+const start=min(s);
+
 let work=0,pause=0,last=start;
 
 document.querySelectorAll(".ps").forEach((ps,i)=>{
   let pe=document.querySelectorAll(".pe")[i];
+
   if(ps.value && pe.value){
     let a=min(ps.value),b=min(pe.value);
     pause+=b-a;
@@ -118,45 +122,65 @@ let now=new Date();
 let nowMin=now.getHours()*60+now.getMinutes();
 if(nowMin>last) work+=nowMin-last;
 
-// ===== PAUSENLOGIK =====
-let required;
+// =====================
+// MINDESTPAUSE LOGIK
+// =====================
+let requiredPause = 0;
 
-if(work>=540) required=60;
-else if(work>=360) required=30;
-else required=0;
+if(work >= 540) requiredPause = 60;
+else if(work >= 360) requiredPause = 30;
+else requiredPause = 0;
 
-let effective=Math.max(pause,required);
+// tatsächliche vs angenommene Pause
+let effectivePause = Math.max(pause, requiredPause);
 
-// ===== ZEITEN =====
-let t5=start+H58+pause;
-let t8=start+H812+effective;
-let t9=start+H858+effective;
+// =====================
+// ZEITEN
+// =====================
+let t5 = start + H58 + pause;
+let t8 = start + H812 + effectivePause;
+let t9 = start + H858 + effectivePause;
 
-// ===== 10h korrekt =====
-let t10=start+TEN;
-let t10real=start+TEN+Math.max(pause,60);
+// =====================
+// 10h LOGIK (KORREKT GETRENNT)
+// =====================
+let t10_work = start + TEN;
 
-// ===== OUTPUT =====
-document.getElementById("out").innerHTML=`
+// ab 10h mindestens 60 min Pause
+let requiredPause10h = Math.max(60, pause);
+let t10_real = start + TEN + requiredPause10h;
+
+// =====================
+// OUTPUT
+// =====================
+document.getElementById("out").innerHTML = `
 
 <div class="main">🟢 Feierabend: ${fmt(t8)}</div>
 
 <div class="section">
 <b>Arbeitszeit:</b> ${Math.floor(work/60)}h ${work%60}min<br>
 <b>Tatsächliche Pause:</b> ${pause} min<br>
-<b>Automatisch angenommen:</b> ${required} min<br>
+<b>Mindestpause:</b> ${requiredPause} min<br>
+<b>Status:</b> ${work>=TEN ? "⚠️ 10h Bereich erreicht" : "✅ im Rahmen"}
 </div>
 
-<div class="section ${pause<required?'warn':'ok'}">
-${pause<required ? "⚠️ Pause unter Mindestwert" : "✅ Pause erfüllt"}
+<div class="section ${pause < requiredPause ? 'warn' : 'ok'}">
+${pause < requiredPause 
+  ? "⚠️ Pause unter Mindestwert" 
+  : "✅ Pause erfüllt"}
 </div>
 
 <div class="section">
+
 <b>5h58:</b> ${fmt(t5)}<br>
 <b>8h12:</b> ${fmt(t8)}<br>
 <b>8h58:</b> ${fmt(t9)}<br>
-<b>10h (Arbeitszeit):</b> ${fmt(t10)}<br>
-<b>10h (real inkl Pause):</b> ${fmt(t10real)}
+
+<hr>
+
+<b>10h Arbeitszeit:</b> ${fmt(t10_work)}<br>
+<b>10h real (inkl. Pause ≥60min):</b> ${fmt(t10_real)}
+
 </div>
 
 `;
