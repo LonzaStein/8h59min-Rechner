@@ -2,265 +2,168 @@
 <html lang="de">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Feierabend-Rechner</title>
+<title>Feierabend Rechner</title>
 
 <style>
-* { box-sizing:border-box; margin:0; padding:0; }
-
-body {
-  font-family: Arial, sans-serif;
-  background: linear-gradient(135deg,#667eea,#764ba2);
+body{
+  font-family:Arial;
+  background:#667eea;
   display:flex;
   justify-content:center;
-  align-items:center;
-  min-height:100vh;
+  padding:30px;
 }
 
-.card {
+.card{
+  width:520px;
   background:white;
-  padding:32px;
-  border-radius:20px;
-  width:480px;
-  box-shadow:0 10px 30px rgba(0,0,0,.25);
+  border-radius:16px;
+  padding:24px;
 }
 
-h2 { text-align:center; margin-bottom:18px; }
+h2{text-align:center;}
 
-input[type=time] {
+input[type=time]{
   width:100%;
-  padding:12px;
-  margin-top:10px;
-  border-radius:10px;
-  border:1px solid #ccc;
-}
-
-button {
-  width:100%;
-  padding:14px;
-  background:#667eea;
-  border:none;
-  border-radius:12px;
-  color:white;
-  margin-top:10px;
-  cursor:pointer;
-}
-
-.pause-group {
-  border:1px solid #ccc;
-  border-radius:10px;
   padding:10px;
-  margin-top:8px;
-  position:relative;
+  margin-top:10px;
 }
 
-.remove-btn {
-  position:absolute;
-  right:8px;
-  top:8px;
-  background:#dc2626;
+button{
+  width:100%;
+  padding:10px;
+  margin-top:10px;
+  background:#4f46e5;
   color:white;
   border:none;
-  width:22px;
-  height:22px;
-  border-radius:50%;
-  cursor:pointer;
+  border-radius:10px;
 }
 
-#status { margin-top:18px; line-height:1.6; }
+.section{
+  margin-top:16px;
+  padding:12px;
+  border-radius:10px;
+  background:#f3f4f6;
+}
 
-.ok { color:#16a34a; font-weight:bold; }
-.warn { color:#dc2626; font-weight:bold; }
-.info { color:#2563eb; font-weight:bold; }
-
-.main {
+.main{
   font-size:20px;
   text-align:center;
-  margin-top:10px;
+  margin:12px 0;
 }
+
+.ok{color:green;font-weight:bold;}
+.warn{color:red;font-weight:bold;}
+.info{color:#2563eb;font-weight:bold;}
 </style>
 </head>
 
 <body>
+
 <div class="card">
-<h2>⏰ Feierabend-Rechner</h2>
+<h2>⏰ Feierabend Rechner</h2>
 
-<input type="time" id="startzeit">
+<input type="time" id="start">
 
-<div id="pausenContainer"></div>
-<button id="addPause">Pause hinzufügen</button>
+<div id="pausen"></div>
+<button onclick="addPause()">Pause hinzufügen</button>
 
-<button onclick="debugNotificationState()">🔍 Notification Debug</button>
-
-<div id="status"></div>
+<div id="out"></div>
 </div>
 
 <script>
 
-// ===== KONSTANTEN =====
-const TARGET_5H58 = 358;
-const TARGET_8H12 = 492;
-const TARGET_8H58 = 538;
-const TEN_HOURS = 600;
+const TEN = 600;
+const H58 = 358;
+const H812 = 492;
+const H858 = 538;
 
-// ===== HELPERS =====
-function toMin(t){
-  const [h,m]=t.split(":").map(Number);
+function min(t){
+  let [h,m]=t.split(":").map(Number);
   return h*60+m;
 }
 
 function fmt(m){
-  return String(Math.floor(m/60)%24).padStart(2,"0")+":"+
-         String(m%60).padStart(2,"0");
+  return String(Math.floor(m/60)%24).padStart(2,"0")+":"+String(m%60).padStart(2,"0");
 }
 
-// ===== PAUSEN =====
-const pc=document.getElementById("pausenContainer");
-
-document.getElementById("addPause").onclick=()=>{
-  const d=document.createElement("div");
-  d.className="pause-group";
+function addPause(){
+  let d=document.createElement("div");
   d.innerHTML=`
-    <input type="time" class="ps"> –
+    <input type="time" class="ps">
     <input type="time" class="pe">
-    <button class="remove-btn">−</button>
   `;
-  d.querySelector(".remove-btn").onclick=()=>{d.remove();update()};
-  d.querySelectorAll("input").forEach(i=>i.onchange=update);
-  pc.appendChild(d);
-};
-
-document.querySelectorAll("input").forEach(i=>i.onchange=update);
-
-// ===== NOTIFICATIONS =====
-let notificationsEnabled=false;
-let timers=[];
-
-function notify(t,b){
-  if(notificationsEnabled) new Notification(t,{body:b});
+  document.getElementById("pausen").appendChild(d);
+  d.querySelectorAll("input").forEach(i=>i.oninput=calc);
 }
 
-function clearTimers(){
-  timers.forEach(t=>clearTimeout(t));
-  timers=[];
-}
+function calc(){
 
-// ===== DEBUG =====
-function debugNotificationState(){
-  alert("Notification permission: " + Notification.permission);
-}
+let s=document.getElementById("start").value;
+if(!s) return;
 
-// ===== MAIN =====
-function update(){
+let start=min(s);
+let work=0,pause=0,last=start;
 
-  const s=document.getElementById("startzeit").value;
-  if(!s) return;
-
-  const start=toMin(s);
-
-  let work=0,pause=0,last=start;
-
-  document.querySelectorAll(".pause-group").forEach(p=>{
-    const ps=p.querySelector(".ps").value;
-    const pe=p.querySelector(".pe").value;
-
-    if(ps && pe){
-      const a=toMin(ps),b=toMin(pe);
-      work+=a-last;
-      pause+=b-a;
-      last=b;
-    }
-  });
-
-  const now=new Date();
-  const nowMin=now.getHours()*60+now.getMinutes();
-
-  let currentWork=work;
-  if(nowMin>last) currentWork+=nowMin-last;
-
-  // ===== MINDESTPAUSE =====
-  let requiredPause;
-
-  if(currentWork>=600) requiredPause=60;
-  else if(currentWork>=540) requiredPause=45;
-  else if(currentWork>=360) requiredPause=30;
-  else requiredPause=0;
-
-  let effectivePause = pause===0 ? requiredPause : Math.max(pause,requiredPause);
-
-  // ===== 10H LOGIK (KORREKT) =====
-  const t10_work = start + TEN_HOURS;
-  const requiredPause10h = Math.max(60,pause);
-  const t10_real = start + TEN_HOURS + requiredPause10h;
-
-  // ===== ZEITEN =====
-  const t5 = start + TARGET_5H58 + pause;
-  const t8 = start + TARGET_8H12 + effectivePause;
-  const t9 = start + TARGET_8H58 + effectivePause;
-
-  // ===== PRIMARY =====
-  let primary=t8;
-
-  let out=[];
-
-  out.push(`<div class="main">🟢 Feierabend: ${fmt(primary)}</div>`);
-
-  out.push(`<div class="info">
-    Arbeitszeit: ${Math.floor(currentWork/60)}h ${currentWork%60}min<br>
-    Pause: ${pause||requiredPause} min
-  </div>`);
-
-  // ===== PAUSE STATUS =====
-  if(pause===0){
-    out.push(`<span class="info">ℹ️ ${requiredPause} min Pause automatisch angenommen</span>`);
+document.querySelectorAll(".ps").forEach((ps,i)=>{
+  let pe=document.querySelectorAll(".pe")[i];
+  if(ps.value && pe.value){
+    let a=min(ps.value),b=min(pe.value);
+    pause+=b-a;
+    work+=a-last;
+    last=b;
   }
-  else if(pause<requiredPause){
-    out.push(`<span class="warn">⚠️ Pause zu kurz</span>`);
-  }
-  else{
-    out.push(`<span class="ok">✅ Pause ok</span>`);
-  }
+});
 
-  // ===== DETAILS =====
-  out.push(`<details style="margin-top:10px;">
-    <summary>Details</summary>
-    5h58: ${fmt(t5)}<br>
-    8h12: ${fmt(t8)}<br>
-    8h58: ${fmt(t9)}<br>
-    <hr>
-    10h Arbeitszeit: ${fmt(t10_work)}<br>
-    10h real (inkl Pause): ${fmt(t10_real)}
-  </details>`);
+let now=new Date();
+let nowMin=now.getHours()*60+now.getMinutes();
+if(nowMin>last) work+=nowMin-last;
 
-  document.getElementById("status").innerHTML=out.join("<br>");
+// ===== PAUSENLOGIK =====
+let required;
 
-  if(notificationsEnabled){
-    schedule(start,pause,effectivePause);
-  }
+if(work>=540) required=60;
+else if(work>=360) required=30;
+else required=0;
+
+let effective=Math.max(pause,required);
+
+// ===== ZEITEN =====
+let t5=start+H58+pause;
+let t8=start+H812+effective;
+let t9=start+H858+effective;
+
+// ===== 10h korrekt =====
+let t10=start+TEN;
+let t10real=start+TEN+Math.max(pause,60);
+
+// ===== OUTPUT =====
+document.getElementById("out").innerHTML=`
+
+<div class="main">🟢 Feierabend: ${fmt(t8)}</div>
+
+<div class="section">
+<b>Arbeitszeit:</b> ${Math.floor(work/60)}h ${work%60}min<br>
+<b>Tatsächliche Pause:</b> ${pause} min<br>
+<b>Automatisch angenommen:</b> ${required} min<br>
+</div>
+
+<div class="section ${pause<required?'warn':'ok'}">
+${pause<required ? "⚠️ Pause unter Mindestwert" : "✅ Pause erfüllt"}
+</div>
+
+<div class="section">
+<b>5h58:</b> ${fmt(t5)}<br>
+<b>8h12:</b> ${fmt(t8)}<br>
+<b>8h58:</b> ${fmt(t9)}<br>
+<b>10h (Arbeitszeit):</b> ${fmt(t10)}<br>
+<b>10h (real inkl Pause):</b> ${fmt(t10real)}
+</div>
+
+`;
+
 }
 
-// ===== SIMPLE SCHEDULER =====
-function schedule(start,pause,effectivePause){
-  clearTimers();
-
-  const events=[
-    start+TARGET_8H12+effectivePause,
-    start+TEN_HOURS+requiredPause10h
-  ];
-
-  const now=new Date();
-  const nowMin=now.getHours()*60+now.getMinutes();
-
-  events.forEach(e=>{
-    const trigger=e-5;
-    if(trigger>nowMin){
-      const t=setTimeout(()=>{
-        notify("Reminder","Event in 5 min");
-      },(trigger-nowMin)*60000);
-      timers.push(t);
-    }
-  });
-}
+document.getElementById("start").oninput=calc;
 
 </script>
 
