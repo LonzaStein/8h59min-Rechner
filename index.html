@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Feierabend- & Pausenrechner</title>
+<title>Feierabend-Rechner</title>
 
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
@@ -103,7 +103,6 @@ button {
 const TARGET_5H58 = 358;
 const TARGET_8H12 = 492;
 const TARGET_8H58 = 538;
-const REQUIRED_PAUSE = 30;
 const MAX_WORK = 600;
 
 // ===== HILFSFUNKTIONEN =====
@@ -116,7 +115,7 @@ function fmt(m){
          String(m%60).padStart(2,"0");
 }
 
-// ===== PAUSEN =====
+// ===== PAUSEN UI =====
 const pc = document.getElementById("pausenContainer");
 
 document.getElementById("addPause").onclick = () => {
@@ -213,12 +212,22 @@ function update(){
     currentWork += (nowMin - last);
   }
 
-  let effectivePause = pause===0 ? REQUIRED_PAUSE : pause;
+  // ===== DYNAMISCHE MINDESTPAUSE =====
+  let requiredPause;
+
+  if (currentWork >= 600) requiredPause = 60;
+  else if (currentWork >= 540) requiredPause = 45;
+  else if (currentWork >= 360) requiredPause = 30;
+  else requiredPause = 0;
+
+  let effectivePause = pause === 0
+    ? requiredPause
+    : Math.max(pause, requiredPause);
 
   // ===== HAUPTENTSCHEIDUNG =====
-  let primaryEnd = effectivePause>=30
-    ? start + TARGET_8H12 + effectivePause
-    : start + TARGET_8H58 + effectivePause;
+  let primaryEnd = effectivePause < requiredPause
+    ? start + TARGET_8H58 + effectivePause
+    : start + TARGET_8H12 + effectivePause;
 
   let out=[];
 
@@ -227,11 +236,22 @@ function update(){
   // ===== STATUS =====
   out.push(`<div class="info">
     Arbeitszeit: ${Math.floor(currentWork/60)}h ${currentWork%60}min<br>
-    Pause: ${pause || 30} min<br>
+    Pause: ${pause || requiredPause} min<br>
     ${currentWork>MAX_WORK
-      ? "⚠️ Genehmigung nötig (>10h)"
-      : "✅ im Rahmen"}
+      ? "⚠️ >10h → Genehmigung erforderlich"
+      : "✅ im erlaubten Bereich"}
   </div>`);
+
+  // ===== PAUSENSTATUS =====
+  if (pause === 0) {
+    out.push(`<span class="info">ℹ️ Automatisch ${requiredPause} min Pause angenommen</span>`);
+  }
+  else if (pause < requiredPause) {
+    out.push(`<span class="warn">⚠️ Pause ${pause} min < ${requiredPause} min erforderlich</span>`);
+  }
+  else {
+    out.push(`<span class="ok">✅ Pause erfüllt (${pause}/${requiredPause} min)</span>`);
+  }
 
   // ===== DETAILS =====
   out.push(`<details style="margin-top:10px;">
@@ -242,9 +262,8 @@ function update(){
     10h: ${fmt(start + MAX_WORK + effectivePause)}
   </details>`);
 
-  document.getElementById("status").innerHTML=out.join("");
+  document.getElementById("status").innerHTML=out.join("<br>");
 
-  // ===== NOTIFICATIONS =====
   if(notificationsEnabled){
     scheduleNotifications(start, pause, effectivePause);
   }
