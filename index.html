@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Feierabend‑ & Pausenrechner</title>
+<title>Feierabend- & Pausenrechner</title>
 
 <style>
 * { box-sizing:border-box; margin:0; padding:0; }
@@ -87,7 +87,7 @@ button {
 
 <body>
 <div class="card">
-<h2>⏰ Feierabend‑ & Pausenrechner</h2>
+<h2>⏰ Feierabend- & Pausenrechner</h2>
 
 <input type="time" id="startzeit">
 
@@ -99,10 +99,11 @@ button {
 
 <script>
 // ================= KONSTANTEN =================
-const TARGET_5H58 = 358;   // Stempel nach <6h
-const TARGET_8H12 = 492;   // Regelarbeitszeit
-const TARGET_8H58 = 538;   // Rundungsschutz
+const TARGET_5H58 = 358;
+const TARGET_8H12 = 492;
+const TARGET_8H58 = 538;
 const REQUIRED_PAUSE = 30;
+const MAX_WORK = 600; // 10h reine Arbeitszeit
 
 // ================= HILFSFUNKTIONEN =================
 function toMin(t){
@@ -110,12 +111,13 @@ function toMin(t){
   return h*60+m;
 }
 function fmt(m){
-  return String(Math.floor(m/60)).padStart(2,"0") + ":" +
+  return String(Math.floor(m/60)%24).padStart(2,"0") + ":" +
          String(m%60).padStart(2,"0");
 }
 
 // ================= PAUSEN =================
 const pc = document.getElementById("pausenContainer");
+
 document.getElementById("addPause").onclick = () => {
   const d=document.createElement("div");
   d.className="pause-group";
@@ -150,33 +152,57 @@ function update(){
     }
   });
 
+  // === LIVE-ARBEITSZEIT BIS JETZT ===
+  const now = new Date();
+  const nowMin = now.getHours()*60 + now.getMinutes();
+
+  let currentWork = work;
+  if(nowMin > last){
+    currentWork += (nowMin - last);
+  }
+
+  // === EFFECTIVE PAUSE ===
+  let effectivePause = pause === 0 ? REQUIRED_PAUSE : pause;
+
   let out=[];
 
-  // === AKTUELLE PAUSENZEIT ===
-  out.push(`<span class="info">ℹ️ Aktuelle Gesamt‑Pause: ${pause} min</span>`);
+  // === PAUSENSTATUS ===
+  if (pause === 0) {
+    out.push(`<span class="info">ℹ️ Keine Pause → automatisch 30 min berücksichtigt</span>`);
+  }
+  else if (pause < 30) {
+    out.push(`<span class="warn">⚠️ Pause ${pause} min → unter Mindestpause</span>`);
+  }
+  else if (pause < 60) {
+    out.push(`<span class="ok">✅ Mindestpause erfüllt (${pause} min)</span>`);
+  }
+  else {
+    out.push(`<span class="ok">✅ 60 min Pause erfüllt (${pause} min)</span>`);
+  }
 
-  // === STEMPELN NACH 5H58 ===
-  out.push(
-    `<span class="ok">
-     ✅ Stempeln nach 5h58 (ohne Pause): ${fmt(start + TARGET_5H58 + pause)}
-     </span>`
-  );
+  // === ARBEITSZEIT STATUS ===
+  out.push(`<span class="info">ℹ️ Aktuelle Arbeitszeit: ${Math.floor(currentWork/60)}h ${currentWork%60}min</span>`);
 
-  // === STEMPELN NACH 8H12 (MIT PAUSE) ===
-  const effectivePause = Math.max(pause, REQUIRED_PAUSE);
-  out.push(
-    `<span class="ok">
-     ✅ Stempeln nach 8h12 (inkl. Pause): ${fmt(start + TARGET_8H12 + effectivePause)}
-     </span>`
-  );
+  if(currentWork > MAX_WORK){
+    out.push(`<span class="warn">⚠️ Über 10h Arbeitszeit → Genehmigung erforderlich</span>`);
+  } else {
+    out.push(`<span class="ok">✅ Innerhalb genehmigungsfreier Bereich (&lt;10h)</span>`);
+  }
 
-  // === STEMPEL‑EMPFEHLUNG 8H58 ===
-  out.push(
-    `<span class="warn">
-     ✅ Stempel‑Empfehlung 8h58: ${fmt(start + TARGET_8H58 + pause)}<br>
-     (Rundungsschutz – verhindert Zusatzpause)
-     </span>`
-  );
+  // === ZEITEN ===
+  out.push(`<span class="ok">✅ Stempeln nach 5h58: ${fmt(start + TARGET_5H58 + pause)}</span>`);
+
+  out.push(`<span class="ok">✅ Stempeln nach 8h12: ${fmt(start + TARGET_8H12 + effectivePause)}</span>`);
+
+  out.push(`<span class="warn">
+    ✅ Stempel-Empfehlung 8h58: ${fmt(start + TARGET_8H58 + effectivePause)}<br>
+    (Rundungsschutz)
+  </span>`);
+
+  // === HINWEIS 8H58 ===
+  if(pause >= 30){
+    out.push(`<span class="ok">ℹ️ 8h58-Regel für dich nicht zwingend relevant</span>`);
+  }
 
   document.getElementById("status").innerHTML=out.join("<br>");
 }
