@@ -73,10 +73,10 @@ button {
 .warn { color:#dc2626; font-weight:bold; }
 .info { color:#2563eb; font-weight:bold; }
 
-.main-time {
+.main {
   font-size:20px;
-  margin-top:10px;
   text-align:center;
+  margin-top:10px;
 }
 </style>
 </head>
@@ -89,11 +89,6 @@ button {
 
 <div id="pausenContainer"></div>
 <button id="addPause">Pause hinzufügen</button>
-
-<label style="display:block; margin-top:12px;">
-  <input type="checkbox" id="notifToggle"> Erinnerungen aktivieren
-</label>
-<button id="enableNotif">🔔 Aktivieren</button>
 
 <div id="status"></div>
 </div>
@@ -115,7 +110,7 @@ function fmt(m){
          String(m%60).padStart(2,"0");
 }
 
-// ===== PAUSEN UI =====
+// ===== PAUSEN =====
 const pc = document.getElementById("pausenContainer");
 
 document.getElementById("addPause").onclick = () => {
@@ -133,59 +128,7 @@ document.getElementById("addPause").onclick = () => {
 
 document.querySelectorAll("input").forEach(i=>i.onchange=update);
 
-// ===== NOTIFICATIONS =====
-let notificationsEnabled = false;
-let timers = [];
-
-function notify(title, body){
-  if (!notificationsEnabled) return;
-  new Notification(title,{body});
-}
-
-function clearTimers(){
-  timers.forEach(t => clearTimeout(t));
-  timers=[];
-}
-
-function scheduleNotifications(start, pause, effectivePause){
-  clearTimers();
-
-  const events = [
-    { name:"5h58", time:start + TARGET_5H58 + pause },
-    { name:"8h12", time:start + TARGET_8H12 + effectivePause },
-    { name:"8h58", time:start + TARGET_8H58 + effectivePause },
-    { name:"10h",  time:start + MAX_WORK + effectivePause }
-  ];
-
-  const now = new Date();
-  const nowMin = now.getHours()*60 + now.getMinutes();
-
-  events.forEach(ev=>{
-    const trigger = ev.time - 5;
-    if(trigger > nowMin){
-      const delay = (trigger - nowMin)*60000;
-      const t=setTimeout(()=>{
-        notify("Erinnerung", `${ev.name} in 5 Minuten`);
-      },delay);
-      timers.push(t);
-    }
-  });
-}
-
-document.getElementById("enableNotif").onclick = async () => {
-  if(!document.getElementById("notifToggle").checked){
-    alert("Bitte zuerst Checkbox aktivieren");
-    return;
-  }
-
-  const perm = await Notification.requestPermission();
-  if(perm==="granted"){
-    notificationsEnabled=true;
-    update();
-  }
-};
-
-// ===== HAUPTLOGIK =====
+// ===== LOGIK =====
 function update(){
   const s=document.getElementById("startzeit").value;
   if(!s) return;
@@ -204,69 +147,69 @@ function update(){
     }
   });
 
-  const now = new Date();
-  const nowMin = now.getHours()*60 + now.getMinutes();
+  const now=new Date();
+  const nowMin=now.getHours()*60+now.getMinutes();
 
-  let currentWork = work;
-  if(nowMin > last){
-    currentWork += (nowMin - last);
+  let currentWork=work;
+  if(nowMin>last){
+    currentWork += (nowMin-last);
   }
 
-  // ===== DYNAMISCHE MINDESTPAUSE =====
+  // ===== MINDESTPAUSE DYNAMISCH =====
   let requiredPause;
+  if(currentWork>=600) requiredPause=60;
+  else if(currentWork>=540) requiredPause=45;
+  else if(currentWork>=360) requiredPause=30;
+  else requiredPause=0;
 
-  if (currentWork >= 600) requiredPause = 60;
-  else if (currentWork >= 540) requiredPause = 45;
-  else if (currentWork >= 360) requiredPause = 30;
-  else requiredPause = 0;
+  let effectivePause = pause===0 ? requiredPause : Math.max(pause, requiredPause);
 
-  let effectivePause = pause === 0
-    ? requiredPause
-    : Math.max(pause, requiredPause);
+  // ===== ZEITEN =====
+  const t5 = start + TARGET_5H58 + pause;
+  const t8 = start + TARGET_8H12 + effectivePause;
+  const t9 = start + TARGET_8H58 + effectivePause;
 
-  // ===== HAUPTENTSCHEIDUNG =====
-  let primaryEnd = effectivePause < requiredPause
-    ? start + TARGET_8H58 + effectivePause
-    : start + TARGET_8H12 + effectivePause;
+  // ===== 10h korrekt (WICHTIG FIX) =====
+  const t10_work_only = start + MAX_WORK;                 // korrekt
+  const t10_stamp = start + MAX_WORK + effectivePause;    // nur Anzeige
 
   let out=[];
 
-  out.push(`<div class="main-time">🟢 Feierabend: ${fmt(primaryEnd)}</div>`);
+  // ===== HAUPTAUSGABE =====
+  out.push(`<div class="main">🟢 Feierabend: ${fmt(t8)}</div>`);
 
   // ===== STATUS =====
   out.push(`<div class="info">
     Arbeitszeit: ${Math.floor(currentWork/60)}h ${currentWork%60}min<br>
     Pause: ${pause || requiredPause} min<br>
     ${currentWork>MAX_WORK
-      ? "⚠️ >10h → Genehmigung erforderlich"
-      : "✅ im erlaubten Bereich"}
+      ? "⚠️ >10h Arbeitszeit → Genehmigung nötig"
+      : "✅ im Rahmen"}
   </div>`);
 
-  // ===== PAUSENSTATUS =====
-  if (pause === 0) {
-    out.push(`<span class="info">ℹ️ Automatisch ${requiredPause} min Pause angenommen</span>`);
+  // ===== PAUSE STATUS =====
+  if(pause===0){
+    out.push(`<span class="info">ℹ️ automatisch ${requiredPause} min Pause angenommen</span>`);
   }
-  else if (pause < requiredPause) {
-    out.push(`<span class="warn">⚠️ Pause ${pause} min < ${requiredPause} min erforderlich</span>`);
+  else if(pause<requiredPause){
+    out.push(`<span class="warn">⚠️ Pause ${pause} < ${requiredPause} min</span>`);
   }
-  else {
-    out.push(`<span class="ok">✅ Pause erfüllt (${pause}/${requiredPause} min)</span>`);
+  else{
+    out.push(`<span class="ok">✅ Pause erfüllt</span>`);
   }
 
   // ===== DETAILS =====
   out.push(`<details style="margin-top:10px;">
     <summary>Details</summary>
-    5h58: ${fmt(start + TARGET_5H58 + pause)}<br>
-    8h12: ${fmt(start + TARGET_8H12 + effectivePause)}<br>
-    8h58: ${fmt(start + TARGET_8H58 + effectivePause)}<br>
-    10h: ${fmt(start + MAX_WORK + effectivePause)}
+    5h58: ${fmt(t5)}<br>
+    8h12: ${fmt(t8)}<br>
+    8h58: ${fmt(t9)}<br>
+    <hr>
+    10h (Arbeitszeit): ${fmt(t10_work_only)}<br>
+    10h (inkl. Pause): ${fmt(t10_stamp)}
   </details>`);
 
   document.getElementById("status").innerHTML=out.join("<br>");
-
-  if(notificationsEnabled){
-    scheduleNotifications(start, pause, effectivePause);
-  }
 }
 </script>
 
