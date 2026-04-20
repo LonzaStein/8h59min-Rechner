@@ -90,30 +90,34 @@ button {
 <div id="pausenContainer"></div>
 <button id="addPause">Pause hinzufügen</button>
 
+<button onclick="debugNotificationState()">🔍 Notification Debug</button>
+
 <div id="status"></div>
 </div>
 
 <script>
+
 // ===== KONSTANTEN =====
 const TARGET_5H58 = 358;
 const TARGET_8H12 = 492;
 const TARGET_8H58 = 538;
-const MAX_WORK = 600;
+const TEN_HOURS = 600;
 
-// ===== HILFSFUNKTIONEN =====
+// ===== HELPERS =====
 function toMin(t){
-  const [h,m] = t.split(":").map(Number);
+  const [h,m]=t.split(":").map(Number);
   return h*60+m;
 }
+
 function fmt(m){
   return String(Math.floor(m/60)%24).padStart(2,"0")+":"+
          String(m%60).padStart(2,"0");
 }
 
 // ===== PAUSEN =====
-const pc = document.getElementById("pausenContainer");
+const pc=document.getElementById("pausenContainer");
 
-document.getElementById("addPause").onclick = () => {
+document.getElementById("addPause").onclick=()=>{
   const d=document.createElement("div");
   d.className="pause-group";
   d.innerHTML=`
@@ -128,19 +132,40 @@ document.getElementById("addPause").onclick = () => {
 
 document.querySelectorAll("input").forEach(i=>i.onchange=update);
 
-// ===== LOGIK =====
+// ===== NOTIFICATIONS =====
+let notificationsEnabled=false;
+let timers=[];
+
+function notify(t,b){
+  if(notificationsEnabled) new Notification(t,{body:b});
+}
+
+function clearTimers(){
+  timers.forEach(t=>clearTimeout(t));
+  timers=[];
+}
+
+// ===== DEBUG =====
+function debugNotificationState(){
+  alert("Notification permission: " + Notification.permission);
+}
+
+// ===== MAIN =====
 function update(){
+
   const s=document.getElementById("startzeit").value;
   if(!s) return;
 
   const start=toMin(s);
-  let work=0, pause=0, last=start;
+
+  let work=0,pause=0,last=start;
 
   document.querySelectorAll(".pause-group").forEach(p=>{
     const ps=p.querySelector(".ps").value;
     const pe=p.querySelector(".pe").value;
+
     if(ps && pe){
-      const a=toMin(ps), b=toMin(pe);
+      const a=toMin(ps),b=toMin(pe);
       work+=a-last;
       pause+=b-a;
       last=b;
@@ -151,51 +176,49 @@ function update(){
   const nowMin=now.getHours()*60+now.getMinutes();
 
   let currentWork=work;
-  if(nowMin>last){
-    currentWork += (nowMin-last);
-  }
+  if(nowMin>last) currentWork+=nowMin-last;
 
-  // ===== MINDESTPAUSE DYNAMISCH =====
+  // ===== MINDESTPAUSE =====
   let requiredPause;
+
   if(currentWork>=600) requiredPause=60;
   else if(currentWork>=540) requiredPause=45;
   else if(currentWork>=360) requiredPause=30;
   else requiredPause=0;
 
-  let effectivePause = pause===0 ? requiredPause : Math.max(pause, requiredPause);
+  let effectivePause = pause===0 ? requiredPause : Math.max(pause,requiredPause);
+
+  // ===== 10H LOGIK (KORREKT) =====
+  const t10_work = start + TEN_HOURS;
+  const requiredPause10h = Math.max(60,pause);
+  const t10_real = start + TEN_HOURS + requiredPause10h;
 
   // ===== ZEITEN =====
   const t5 = start + TARGET_5H58 + pause;
   const t8 = start + TARGET_8H12 + effectivePause;
   const t9 = start + TARGET_8H58 + effectivePause;
 
-  // ===== 10h korrekt (WICHTIG FIX) =====
-  const t10_work_only = start + MAX_WORK;                 // korrekt
-  const t10_stamp = start + MAX_WORK + effectivePause;    // nur Anzeige
+  // ===== PRIMARY =====
+  let primary=t8;
 
   let out=[];
 
-  // ===== HAUPTAUSGABE =====
-  out.push(`<div class="main">🟢 Feierabend: ${fmt(t8)}</div>`);
+  out.push(`<div class="main">🟢 Feierabend: ${fmt(primary)}</div>`);
 
-  // ===== STATUS =====
   out.push(`<div class="info">
     Arbeitszeit: ${Math.floor(currentWork/60)}h ${currentWork%60}min<br>
-    Pause: ${pause || requiredPause} min<br>
-    ${currentWork>MAX_WORK
-      ? "⚠️ >10h Arbeitszeit → Genehmigung nötig"
-      : "✅ im Rahmen"}
+    Pause: ${pause||requiredPause} min
   </div>`);
 
   // ===== PAUSE STATUS =====
   if(pause===0){
-    out.push(`<span class="info">ℹ️ automatisch ${requiredPause} min Pause angenommen</span>`);
+    out.push(`<span class="info">ℹ️ ${requiredPause} min Pause automatisch angenommen</span>`);
   }
   else if(pause<requiredPause){
-    out.push(`<span class="warn">⚠️ Pause ${pause} < ${requiredPause} min</span>`);
+    out.push(`<span class="warn">⚠️ Pause zu kurz</span>`);
   }
   else{
-    out.push(`<span class="ok">✅ Pause erfüllt</span>`);
+    out.push(`<span class="ok">✅ Pause ok</span>`);
   }
 
   // ===== DETAILS =====
@@ -205,12 +228,40 @@ function update(){
     8h12: ${fmt(t8)}<br>
     8h58: ${fmt(t9)}<br>
     <hr>
-    10h (Arbeitszeit): ${fmt(t10_work_only)}<br>
-    10h (inkl. Pause): ${fmt(t10_stamp)}
+    10h Arbeitszeit: ${fmt(t10_work)}<br>
+    10h real (inkl Pause): ${fmt(t10_real)}
   </details>`);
 
   document.getElementById("status").innerHTML=out.join("<br>");
+
+  if(notificationsEnabled){
+    schedule(start,pause,effectivePause);
+  }
 }
+
+// ===== SIMPLE SCHEDULER =====
+function schedule(start,pause,effectivePause){
+  clearTimers();
+
+  const events=[
+    start+TARGET_8H12+effectivePause,
+    start+TEN_HOURS+requiredPause10h
+  ];
+
+  const now=new Date();
+  const nowMin=now.getHours()*60+now.getMinutes();
+
+  events.forEach(e=>{
+    const trigger=e-5;
+    if(trigger>nowMin){
+      const t=setTimeout(()=>{
+        notify("Reminder","Event in 5 min");
+      },(trigger-nowMin)*60000);
+      timers.push(t);
+    }
+  });
+}
+
 </script>
 
 </body>
