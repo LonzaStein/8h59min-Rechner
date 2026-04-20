@@ -52,9 +52,7 @@ button{
   margin:12px 0;
 }
 
-.ok{color:green;font-weight:bold;}
-.warn{color:red;font-weight:bold;}
-.info{color:#2563eb;font-weight:bold;}
+.info{color:#2563eb;}
 </style>
 </head>
 
@@ -122,37 +120,28 @@ let now=new Date();
 let nowMin=now.getHours()*60+now.getMinutes();
 if(nowMin>last) work+=nowMin-last;
 
-// =====================
-// MINDESTPAUSE LOGIK
-// =====================
-let requiredPause = 0;
+// ======================
+// MINDESTPAUSE (REDUZIERT)
+// ======================
+let requiredPause;
 
 if(work >= 540) requiredPause = 60;
 else if(work >= 360) requiredPause = 30;
 else requiredPause = 0;
 
-// tatsächliche vs angenommene Pause
+// effektive Pause
 let effectivePause = Math.max(pause, requiredPause);
 
-// =====================
-// ZEITEN
-// =====================
+// ======================
+// ZEITPUNKTE
+// ======================
 let t5 = start + H58 + pause;
 let t8 = start + H812 + effectivePause;
 let t9 = start + H858 + effectivePause;
 
-// =====================
-// 10h LOGIK (KORREKT GETRENNT)
-// =====================
-let t10_work = start + TEN;
-
-// ab 10h mindestens 60 min Pause
-let requiredPause10h = Math.max(60, pause);
-let t10_real = start + TEN + requiredPause10h;
-
-// =====================
-// OUTPUT
-// =====================
+// ======================
+// OUTPUT (REDUZIERT)
+// ======================
 document.getElementById("out").innerHTML = `
 
 <div class="main">🟢 Feierabend: ${fmt(t8)}</div>
@@ -160,26 +149,18 @@ document.getElementById("out").innerHTML = `
 <div class="section">
 <b>Arbeitszeit:</b> ${Math.floor(work/60)}h ${work%60}min<br>
 <b>Tatsächliche Pause:</b> ${pause} min<br>
-<b>Mindestpause:</b> ${requiredPause} min<br>
-<b>Status:</b> ${work>=TEN ? "⚠️ 10h Bereich erreicht" : "✅ im Rahmen"}
-</div>
 
-<div class="section ${pause < requiredPause ? 'warn' : 'ok'}">
-${pause < requiredPause 
-  ? "⚠️ Pause unter Mindestwert" 
-  : "✅ Pause erfüllt"}
+<b>Mindestpause:</b><br>
+6h → 0 min<br>
+8h → 30 min<br>
+9h → 60 min
 </div>
 
 <div class="section">
 
 <b>5h58:</b> ${fmt(t5)}<br>
 <b>8h12:</b> ${fmt(t8)}<br>
-<b>8h58:</b> ${fmt(t9)}<br>
-
-<hr>
-
-<b>10h Arbeitszeit:</b> ${fmt(t10_work)}<br>
-<b>10h real (inkl. Pause ≥60min):</b> ${fmt(t10_real)}
+<b>8h58:</b> ${fmt(t9)}
 
 </div>
 
